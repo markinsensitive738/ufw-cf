@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# ufw-cf — keep UFW rules in sync with Cloudflare's published IP ranges.
+
+set -euo pipefail
+
+VERSION="1.0.0"
+
+CONFIG_FILE="${UFW_CF_CONFIG:-/etc/ufw-cf/config}"
+STATE_DIR="${UFW_CF_STATE_DIR:-/var/lib/ufw-cf}"
+CF_V4_URL="${UFW_CF_V4_URL:-https://www.cloudflare.com/ips-v4}"
+CF_V6_URL="${UFW_CF_V6_URL:-https://www.cloudflare.com/ips-v6}"
+RULE_TAG="Cloudflare (ufw-cf)"
+
+PORTS="80,443"
+IPV6="true"
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    C_RED=$'\e[31m'; C_GREEN=$'\e[32m'; C_YELLOW=$'\e[33m'
+    C_BLUE=$'\e[34m'; C_BOLD=$'\e[1m'; C_RESET=$'\e[0m'
+else
+    C_RED=; C_GREEN=; C_YELLOW=; C_BLUE=; C_BOLD=; C_RESET=
+fi
+
+say()  { printf '%s\n' "$*"; }
+info() { printf '%s==>%s %s\n' "$C_BLUE" "$C_RESET" "$*"; }
+ok()   { printf '%s✓%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+warn() { printf '%s!%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
+err()  { printf '%sERROR:%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
+die()  { err "$*"; exit 1; }
+
+load_config() {
+    if [ -r "$CONFIG_FILE" ]; then
+        # shellcheck disable=SC1090
+        . "$CONFIG_FILE"
+    fi
+}
+
+require_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        if command -v sudo >/dev/null; then
+            exec sudo -E "$0" "$@"
+        fi
+        die "this command needs root; re-run with sudo"
+    fi
+}
+
+require_deps() {
+    command -v curl >/dev/null || die "curl is not installed"
+    command -v ufw  >/dev/null || die "ufw is not installed"
+}
+
+valid_cidr_file() {
+    [ -s "$1" ] || return 1
+    grep -qvE '^([[:space:]]*(#.*)?|[0-9a-fA-F:.]+/[0-9]+)[[:space:]]*$' "$1" && return 1
+    return 0
+}
+
+fetch_ips() {
+    local url="$1" dest="$2"
+    curl -fsSL --retry 3 --max-time 20 "$url" -o "$dest"
+    valid_cidr_file "$dest" || return 1
+}
+
+parse_ports() {
+    local raw="$1"
+    raw="${raw// /}"
+    [ -n "$raw" ] || die "PORTS is empty — set PORTS=\"80,443\" in $CONFIG_FILE"
+    IFS=',' read -r -a _PORTS <<< "$raw"
+    local p
+    for p in "${_PORTS[@]}"; do
+        [[ "$p" =~ ^[0-9]+$ ]] || die "invalid port: $p"
+        (( p >= 1 && p <= 65535 )) || die "port out of range: $p"
+    done
+}
+
+tagged_rule_numbers() {
+    ufw status numbered 2>/dev/null \
+        | grep -F -- "# $RULE_TAG" \
+        | sed -nE 's/^\[[[:space:]]*([0-9]+)\].*/\1/p' \
+        | sort -rn
+}
+
+remove_tagged_rules() {
+    local n
+    while IFS= read -r n; do
+        [ -n "$n" ] || continue
+        printf 'y\n' | ufw delete "$n" >/dev/null
+    done < <(tagged_rule_numbers)
+}
+
+apply_rules_from_file() {
+    local file="$1"
+    local ip port
+    while IFS= read -r ip; do
+        ip="${ip%%#*}"
+        ip="${ip//[[:space:]]/}"
+        [ -n "$ip" ] || continue
+        for port in "${_PORTS[@]}"; do
+            ufw allow proto tcp from "$ip" to any port "$port" \
+                comment "$RULE_TAG" >/dev/null
+        done
+    done < "$file"
+}
+
+cmd_sync() {
+    require_root "$@"
+    require_deps
+    parse_ports "$PORTS"
+
+    mkdir -p "$STATE_DIR"
+    local v4_tmp v6_tmp
+    v4_tmp="$(mktemp)"
+    v6_tmp="$(mktemp)"
+
+    info "Fetching Cloudflare IPv4 ranges"
+    if ! fetch_ips "$CF_V4_URL" "$v4_tmp"; then
+        rm -f "$v4_tmp" "$v6_tmp"
+        die "could not fetch $CF_V4_URL"
+    fi
+
+    if [ "$IPV6" = "true" ]; then
+        info "Fetching Cloudflare IPv6 ranges"
+        if ! fetch_ips "$CF_V6_URL" "$v6_tmp"; then
+            rm -f "$v4_tmp" "$v6_tmp"
+            die "could not fetch $CF_V6_URL"
+        fi
+    else
+        : > "$v6_tmp"
+    fi
+
+    info "Removing previous ufw-cf rules"
+    remove_tagged_rules
+
+    info "Adding rules for ports: $PORTS"
+    apply_rules_from_file "$v4_tmp"
+    [ "$IPV6" = "true" ] && apply_rules_from_file "$v6_tmp"
+
+    install -m 0644 "$v4_tmp" "$STATE_DIR/ips-v4"
+    install -m 0644 "$v6_tmp" "$STATE_DIR/ips-v6"
+    date -u +'%Y-%m-%dT%H:%M:%SZ' > "$STATE_DIR/last-sync"
+
+    rm -f "$v4_tmp" "$v6_tmp"
+    ok "Sync complete."
+}
+
+cmd_status() {
+    require_deps
+
+    local ufw_state last_sync timer_state rule_count
+    ufw_state="$(ufw status 2>/dev/null | awk 'NR==1{print tolower($2); exit}')"
+    ufw_state="${ufw_state:-unknown}"
+
+    if [ -f "$STATE_DIR/last-sync" ]; then
+        last_sync="$(cat "$STATE_DIR/last-sync")"
+    else
+        last_sync="never"
+    fi
+
+    if systemctl list-unit-files ufw-cf.timer >/dev/null 2>&1; then
+        if systemctl is-active --quiet ufw-cf.timer; then
+            timer_state="active"
+        elif systemctl is-enabled --quiet ufw-cf.timer 2>/dev/null; then
+            timer_state="enabled (inactive)"
+        else
+            timer_state="disabled"
+        fi
+    else
+        timer_state="not installed"
+    fi
+
+    rule_count="$(ufw status 2>/dev/null | grep -cF -- "# $RULE_TAG" || true)"
+
+    printf '%sufw-cf%s v%s\n' "$C_BOLD" "$C_RESET" "$VERSION"
+    printf '  ufw       : %s\n' "$ufw_state"
+    printf '  timer     : %s\n' "$timer_state"
+    printf '  ports     : %s\n' "$PORTS"
+    printf '  ipv6      : %s\n' "$IPV6"
+    printf '  last sync : %s\n' "$last_sync"
+    printf '  rules     : %s\n' "$rule_count"
+    echo
+
+    if [ "$rule_count" -gt 0 ]; then
+        say "Run 'sudo ufw status' to list every rule, or 'sudo ufw status | grep \"$RULE_TAG\"' for just the Cloudflare ones."
+    else
+        say "(no Cloudflare rules installed — run: ufw-cf sync)"
+    fi
+}
+
+cmd_enable() {
+    require_root "$@"
+    systemctl list-unit-files ufw-cf.timer >/dev/null 2>&1 \
+        || die "ufw-cf.timer is not installed"
+    systemctl enable --now ufw-cf.timer
+    ok "Auto-update timer enabled."
+}
+
+cmd_disable() {
+    require_root "$@"
+    if systemctl list-unit-files ufw-cf.timer >/dev/null 2>&1; then
+        systemctl disable --now ufw-cf.timer || true
+    fi
+    ok "Auto-update timer disabled."
+}
+
+cmd_clean() {
+    require_root "$@"
+    require_deps
+    info "Removing all ufw-cf rules"
+    remove_tagged_rules
+    rm -f "$STATE_DIR/ips-v4" "$STATE_DIR/ips-v6" "$STATE_DIR/last-sync"
+    ok "Removed Cloudflare rules from UFW."
+}
+
+menu() {
+    while :; do
+        printf '\n%sufw-cf%s v%s\n' "$C_BOLD" "$C_RESET" "$VERSION"
+        printf '  1) Sync now\n'
+        printf '  2) Show status\n'
+        printf '  3) Enable auto-update timer\n'
+        printf '  4) Disable auto-update timer\n'
+        printf '  5) Remove all Cloudflare rules\n'
+        printf '  q) Quit\n'
+        printf 'Choose: '
+        local choice
+        IFS= read -r choice || exit 0
+        case "$choice" in
+            1) cmd_sync ;;
+            2) cmd_status ;;
+            3) cmd_enable ;;
+            4) cmd_disable ;;
+            5) cmd_clean ;;
+            q|Q|'') exit 0 ;;
+            *) warn "unknown choice: $choice" ;;
+        esac
+    done
+}
+
+usage() {
+    cat <<EOF
+ufw-cf v$VERSION — keep UFW in sync with Cloudflare's IP ranges.
+
+Usage:
+  ufw-cf                 Interactive menu.
+  ufw-cf sync            Fetch Cloudflare IPs and update UFW rules.
+  ufw-cf status          Show current rules and last sync time.
+  ufw-cf enable          Enable the auto-update systemd timer.
+  ufw-cf disable         Disable the auto-update systemd timer.
+  ufw-cf clean           Remove every ufw-cf rule from UFW.
+  ufw-cf -h | --help     Show this help.
+  ufw-cf -v | --version  Show version.
+
+Config:
+  $CONFIG_FILE
+EOF
+}
+
+main() {
+    load_config
+    case "${1:-}" in
+        sync)          shift; cmd_sync    "$@" ;;
+        status)        shift; cmd_status  "$@" ;;
+        enable)        shift; cmd_enable  "$@" ;;
+        disable)       shift; cmd_disable "$@" ;;
+        clean)         shift; cmd_clean   "$@" ;;
+        -h|--help)     usage ;;
+        -v|--version)  echo "ufw-cf v$VERSION" ;;
+        '')            menu ;;
+        *)             usage; exit 1 ;;
+    esac
+}
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main "$@"
+fi

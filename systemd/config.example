@@ -1,0 +1,8 @@
+# /etc/ufw-cf/config — settings for ufw-cf
+
+# Ports to allow from Cloudflare (comma-separated).
+# Use "80" for HTTP only, "443" for HTTPS only, or "80,443" for both.
+PORTS="80,443"
+
+# Include IPv6 ranges (true/false).
+IPV6=true

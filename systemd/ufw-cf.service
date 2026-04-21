@@ -1,0 +1,14 @@
+[Unit]
+Description=Sync UFW rules with Cloudflare IP ranges
+After=network-online.target ufw.service
+Wants=network-online.target
+ConditionPathExists=/usr/sbin/ufw
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ufw-cf sync
+Nice=10
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true

@@ -1,0 +1,15 @@
+Package: ufw-cf
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: all
+Depends: ufw, curl, systemd, bash (>= 4.0)
+Maintainer: Malith Rukshan <hello@malith.dev>
+Homepage: https://github.com/Malith-Rukshan/ufw-cf
+Description: Keep UFW rules in sync with Cloudflare IP ranges
+ ufw-cf is a small CLI and systemd timer that keeps an Ubuntu / Debian
+ firewall in sync with Cloudflare's published IPv4 and IPv6 ranges, so
+ that ports 80 and 443 are reachable only by Cloudflare edge servers.
+ .
+ Includes subcommands: sync, status, enable, disable, clean, and an
+ interactive menu when invoked without arguments.

@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+fi
+
+install -d -m0755 /var/lib/ufw-cf
+
+cat <<'EOF'
+
+ufw-cf is installed.
+
+  sudo ufw-cf sync       # add Cloudflare rules now
+  sudo ufw-cf enable     # enable daily auto-update
+  ufw-cf status          # show current state
+
+Edit /etc/ufw-cf/config to change ports or toggle IPv6.
+EOF
+
+exit 0

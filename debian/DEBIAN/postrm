@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+fi
+
+case "$1" in
+    purge)
+        rm -rf /var/lib/ufw-cf /etc/ufw-cf
+        ;;
+esac
+
+exit 0

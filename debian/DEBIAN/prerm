@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+    systemctl disable --now ufw-cf.timer 2>/dev/null || true
+fi
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    if command -v ufw-cf >/dev/null 2>&1; then
+        ufw-cf clean 2>/dev/null || true
+    fi
+fi
+
+exit 0
